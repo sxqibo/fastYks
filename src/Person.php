@@ -169,7 +169,6 @@ final class Person extends RequestApi
             'roleIdList' => '所属角色',
             'idCard' => '身份证',
             'phone' => '手机号码',
-            'comeSchoolTime' => '入校时间',
             'remarke' => '备注',
             'sex' => '性别',
             'sub_type' => '类型',
@@ -177,9 +176,18 @@ final class Person extends RequestApi
         ];
 
         foreach ($requiredFields as $field => $fieldName) {
-            if (!isset($data[$field]) || $data[$field] === '') {
+            if (!isset($data[$field])) {
                 throw new \InvalidArgumentException("{$fieldName}（{$field}）不能为空");
             }
+            // 对于字符串类型字段，允许空字符串（除了 studentName, idCard, phone）
+            if (in_array($field, ['studentName', 'idCard', 'phone']) && $data[$field] === '') {
+                throw new \InvalidArgumentException("{$fieldName}（{$field}）不能为空");
+            }
+        }
+        
+        // comeSchoolTime 必须存在，但可以为空字符串
+        if (!isset($data['comeSchoolTime'])) {
+            throw new \InvalidArgumentException('入校时间（comeSchoolTime）字段必须存在（可以为空字符串）');
         }
 
         // 验证部门列表格式
