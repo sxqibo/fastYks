@@ -277,32 +277,148 @@ final class Person extends RequestApi
     }
 
     /**
-     * 12. 修改人员信息
-     *
-     * @return array
+     * 修改人员信息
+     * 
+     * 请求方式: POST
+     * 请求体: JSON格式
+     * 
+     * ⚠️ 重要提示：
+     * 1. 为了保证数据处理的有效性，每次调用接口，请最少间隔一秒
+     * 2. 建议不要直接删除人员，直接删除人员后设备内的人员不会被删除
+     * 3. 建议不要的人员更新设置为停用（roleIdList设为[0]），只有停用的人员，设备上才会生效
+     * 4. 此接口为异步接口，如果对时效性有要求，请使用同步更新卡号接口
+     * 5. 由于接口调用会触发平台、前置、设备进行人员出入库操作（此操作非常耗时），这个期间用户是无法使用的
+     * 6. 只有在用户真实发生信息变更的时候才调用此接口，禁止无效调用，否则会造成用户无法正常使用
+     * 
+     * @param array $data 人员信息数组，包含以下字段：
+     *   - id: 人员编号（必填）
+     *   - studentName: 姓名（必填）
+     *   - deptList: 所属部门数组，例如：['123']，强烈建议一个人员只能在一个部门内（必填）
+     *   - job: 职位（必填）
+     *   - email: 电子邮箱（必填）
+     *   - roleIdList: 所属角色数组，例如：[5,7]，5代表教师，7代表学生，0代表停用（必填）
+     *   - idCard: 身份证（必填）
+     *   - phone: 手机号码（必填）
+     *   - comeSchoolTime: 入校时间，格式：2019-01-01（必填）
+     *   - remarke: 备注（必填）
+     *   - sex: 性别，1-男，2-女（必填）
+     *   - sub_type: 走读（1）、住读（2）、半住读（3）、半走读（4）、通用（5）（必填）
+     *   - couponSelected: 状态，默认1（必填）
+     *   - parentName: 父（母）姓名（可选）
+     *   - parentPhone: 父（母）电话（可选）
+     *   - parentIdCard: 父（母）身份证（可选）
+     *   - phyCard: 物理卡号，首位去0（可选，此接口为异步接口，如果对时效性有要求，请使用同步更新卡号接口）
+     *   - photo: 图片base64（可选，即将废弃字段，建议改为调用同步更新照片接口）
+     * @return int|string 返回用户ID
+     * @throws \Exception
+     * 
+     * 返回示例:
+     * {
+     *   "message": "request success",
+     *   "code": 200,
+     *   "data": 用户ID
+     * }
      */
     public function updatePerson($data)
     {
-        // $data = [
-        //     'id'             => $this->request->post('id'),
-        //     'studentName'    => $this->request->post('student_name'),
-        //     'deptList'       => [$this->request->post('dept_list')],
-        //     'job'            => $this->request->post('job'),
-        //     'email'          => $this->request->post('email'),
-        //     'roleIdList'     => [(int)$this->request->post('role_id_list')],
-        //     'idCard'         => $this->request->post('id_card'),
-        //     'phone'          => $this->request->post('phone'),
-        //     'comeSchoolTime' => $this->request->post('come_school_time'),
-        //     'remarke'        => $this->request->post('remarke'),
-        //     'sex'            => $this->request->post('sex'),
-        //     'sub_type'       => $this->request->post('sub_type'),
-        //     'couponSelected' => $this->request->post('coupon_selected'),
-        //     'parentName'     => $this->request->post('parent_name', ''),
-        //     'parentPhone'    => $this->request->post('parent_phone', ''),
-        //     'parentIdCard'   => $this->request->post('parent_id_card', ''),
-        //     'phyCard'        => $this->request->post('phy_ard', ''),
-        //     'photo'          => $this->request->post('photo', ''),
-        // ];
+        // 验证必填参数
+        if (empty($this->sid)) {
+            throw new \InvalidArgumentException('SID（学校编号）不能为空，请在构造函数中传入或通过 Config::set() 设置');
+        }
+
+        // 验证必填字段
+        $requiredFields = [
+            'id' => '人员编号',
+            'studentName' => '姓名',
+            'deptList' => '所属部门',
+            'job' => '职位',
+            'email' => '电子邮箱',
+            'roleIdList' => '所属角色',
+            'idCard' => '身份证',
+            'phone' => '手机号码',
+            'remarke' => '备注',
+            'sex' => '性别',
+            'sub_type' => '类型',
+            'couponSelected' => '状态'
+        ];
+
+        foreach ($requiredFields as $field => $fieldName) {
+            if (!isset($data[$field])) {
+                throw new \InvalidArgumentException("{$fieldName}（{$field}）不能为空");
+            }
+            // 对于字符串类型字段，允许空字符串（除了 id, studentName, idCard, phone）
+            if (in_array($field, ['id', 'studentName', 'idCard', 'phone']) && $data[$field] === '') {
+                throw new \InvalidArgumentException("{$fieldName}（{$field}）不能为空");
+            }
+        }
+        
+        // comeSchoolTime 必须存在，但可以为空字符串
+        if (!isset($data['comeSchoolTime'])) {
+            throw new \InvalidArgumentException('入校时间（comeSchoolTime）字段必须存在（可以为空字符串）');
+        }
+
+        // 验证部门列表格式
+        if (!is_array($data['deptList']) || empty($data['deptList'])) {
+            throw new \InvalidArgumentException('所属部门（deptList）必须是数组且不能为空');
+        }
+
+        // 验证角色列表格式
+        if (!is_array($data['roleIdList']) || empty($data['roleIdList'])) {
+            throw new \InvalidArgumentException('所属角色（roleIdList）必须是数组且不能为空');
+        }
+
+        // 验证性别值
+        if (!in_array($data['sex'], [1, 2])) {
+            throw new \InvalidArgumentException('性别（sex）值错误，只能是 1（男）或 2（女）');
+        }
+
+        // 验证类型值
+        if (!in_array($data['sub_type'], [1, 2, 3, 4, 5])) {
+            throw new \InvalidArgumentException('类型（sub_type）值错误，只能是 1（走读）、2（住读）、3（半住读）、4（半走读）或 5（通用）');
+        }
+
+        // 验证入校时间格式（允许空字符串，但如果有值则验证格式）
+        if (!empty($data['comeSchoolTime']) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $data['comeSchoolTime'])) {
+            throw new \InvalidArgumentException('入校时间（comeSchoolTime）格式错误，应为 yyyy-MM-dd 格式，例如：2019-01-01');
+        }
+
+        // 构建请求数据
+        $requestData = [
+            'id'             => (int)$data['id'],
+            'studentName'    => $data['studentName'],
+            'deptList'       => $data['deptList'],
+            'job'            => $data['job'],
+            'email'          => $data['email'],
+            'roleIdList'     => $data['roleIdList'],
+            'idCard'         => $data['idCard'],
+            'phone'          => $data['phone'],
+            'comeSchoolTime' => $data['comeSchoolTime'],
+            'remarke'        => $data['remarke'],
+            'sex'            => (int)$data['sex'],
+            'sub_type'       => (int)$data['sub_type'],
+            'couponSelected' => (int)$data['couponSelected'],
+        ];
+
+        // 添加可选字段
+        if (isset($data['parentName']) && $data['parentName'] !== '') {
+            $requestData['parentName'] = $data['parentName'];
+        }
+
+        if (isset($data['parentPhone']) && $data['parentPhone'] !== '') {
+            $requestData['parentPhone'] = $data['parentPhone'];
+        }
+
+        if (isset($data['parentIdCard']) && $data['parentIdCard'] !== '') {
+            $requestData['parentIdCard'] = $data['parentIdCard'];
+        }
+
+        if (isset($data['phyCard']) && $data['phyCard'] !== '') {
+            $requestData['phyCard'] = $data['phyCard'];
+        }
+
+        if (isset($data['photo']) && $data['photo'] !== '') {
+            $requestData['photo'] = $data['photo'];
+        }
 
         $query = [
             'sp'  => $this->sp,
@@ -311,28 +427,60 @@ final class Person extends RequestApi
 
         $url = $this->url . UriConst::UPDATE_PERSON . '?' . http_build_query($query);
 
-        $response = Http::post($url, json_encode($data, JSON_UNESCAPED_UNICODE), [
+        $response = Http::post($url, json_encode($requestData, JSON_UNESCAPED_UNICODE), [
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json'
             ]
         ]);
 
-        $ret = json_decode($response, true);
+        $ret = $this->parseResponse($response);
 
-        if(!$ret){
-            exception('更新人员信息异常');
-        }
-
-        return $ret['value'] ?? [];
+        return $ret['data'] ?? $ret['value'] ?? '';
     }
 
     /**
-     * 13. 删除人员信息
-     *
-     * @return array
+     * 删除人员信息
+     * 
+     * 请求方式: POST
+     * 请求体: JSON格式
+     * 
+     * ⚠️ 重要提示：
+     * 1. 建议不要直接删除人员，直接删除人员后设备内的人员不会被删除（除非设备进行清除人员信息重新下载）
+     * 2. 这些人员仍然可以在设备内进行正常操作
+     * 3. 建议需要删除人员时优先把人员状态更新设置为停用（使用 updatePerson 方法，将 roleIdList 设为 [0]）
+     * 4. 只有停用的人员，设备上才会生效并阻止停用人员继续正常使用
+     * 
+     * @param array|int $personId 人员ID，可以是单个ID或ID数组，例如：[1024, 1535]
+     * @return array 返回结果
+     * @throws \Exception
+     * 
+     * 返回示例:
+     * {
+     *   "code": 200,
+     *   "message": null,
+     *   "value": null
+     * }
      */
     public function deletePerson($personId)
     {
+        // 验证必填参数
+        if (empty($this->sid)) {
+            throw new \InvalidArgumentException('SID（学校编号）不能为空，请在构造函数中传入或通过 Config::set() 设置');
+        }
+
+        // 如果是单个ID，转换为数组
+        if (!is_array($personId)) {
+            $personId = [$personId];
+        }
+
+        // 验证人员ID不为空
+        if (empty($personId)) {
+            throw new \InvalidArgumentException('人员ID（personId）不能为空');
+        }
+
+        // 转换为整型数组
+        $personId = array_map('intval', $personId);
+
         $data = [
             'teamId'   => $this->sid,
             'personId' => $personId
@@ -351,13 +499,9 @@ final class Person extends RequestApi
             ]
         ]);
 
-        $ret = json_decode($response, true);
+        $ret = $this->parseResponse($response);
 
-        if(!$ret){
-            exception('删除人员信息异常');
-        }
-
-        return $ret['value'] ?? [];
+        return $ret;
     }
 
     /**
@@ -546,5 +690,63 @@ final class Person extends RequestApi
         }
 
         return $ret['data'] ?? [];
+    }
+
+    /**
+     * 获取部门人员信息
+     * 
+     * 请求方式: POST
+     * 访问控制: 30次/分钟
+     * 
+     * @param int $organId 部门编号（必填）
+     * @return array 返回部门人员列表，每个人员包含：
+     *   - id: uid
+     *   - cust_name: 姓名
+     *   - idcard: 证件号
+     *   - mobilephone: 电话号码
+     *   - sub_balance: 补助余额
+     *   - cashMoney: 账户余额
+     * @throws \Exception
+     * 
+     * 返回示例:
+     * [
+     *   {
+     *     "id": "2088812471510971",
+     *     "cust_name": "张三",
+     *     "idcard": "513701198912070057",
+     *     "mobilephone": "13800138000",
+     *     "sub_balance": 100.00,
+     *     "cashMoney": 200.00
+     *   }
+     * ]
+     * 
+     * 备注:
+     * code:200 成功。
+     * code:403 失败，参考value失败原因
+     */
+    public function queryOrganAccountInfo($organId)
+    {
+        // 验证必填参数
+        if (empty($this->sid)) {
+            throw new \InvalidArgumentException('SID（学校编号）不能为空，请在构造函数中传入或通过 Config::set() 设置');
+        }
+
+        if (empty($organId)) {
+            throw new \InvalidArgumentException('部门编号（organId）不能为空');
+        }
+
+        $query = [
+            'organId' => (int)$organId,
+            'sid'     => $this->sid,
+            'sp'      => $this->sp
+        ];
+
+        $url = $this->url . UriConst::QUERY_ORGAN_ACCOUNT_INFO . '?' . http_build_query($query);
+
+        $response = Http::post($url);
+
+        $ret = $this->parseResponse($response);
+
+        return $ret['value'] ?? [];
     }
 }
