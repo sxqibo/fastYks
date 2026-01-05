@@ -117,22 +117,27 @@ class Config
         }
 
         // 从环境变量读取配置
+        // 优先从 $_ENV 读取（phpdotenv v5+ 默认行为），其次从 getenv() 读取
         $envConfig = [];
         
-        if (getenv('YKS_SP') !== false) {
-            $envConfig['sp'] = getenv('YKS_SP');
+        $sp = $_ENV['YKS_SP'] ?? getenv('YKS_SP');
+        if ($sp !== false && $sp !== '') {
+            $envConfig['sp'] = $sp;
         }
         
-        if (getenv('YKS_SID') !== false) {
-            $envConfig['sid'] = (int)getenv('YKS_SID');
+        $sid = $_ENV['YKS_SID'] ?? getenv('YKS_SID');
+        if ($sid !== false && $sid !== '') {
+            $envConfig['sid'] = (int)$sid;
         }
         
-        if (getenv('YKS_URL') !== false) {
-            $envConfig['url'] = getenv('YKS_URL');
+        $url = $_ENV['YKS_URL'] ?? getenv('YKS_URL');
+        if ($url !== false && $url !== '') {
+            $envConfig['url'] = $url;
         }
         
-        if (getenv('YKS_CHARGE_SECRET_KEY') !== false) {
-            $envConfig['charge_secret_key'] = getenv('YKS_CHARGE_SECRET_KEY');
+        $chargeSecretKey = $_ENV['YKS_CHARGE_SECRET_KEY'] ?? getenv('YKS_CHARGE_SECRET_KEY');
+        if ($chargeSecretKey !== false && $chargeSecretKey !== '') {
+            $envConfig['charge_secret_key'] = $chargeSecretKey;
         }
 
         if (!empty($envConfig)) {
