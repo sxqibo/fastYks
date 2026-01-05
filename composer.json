@@ -1,0 +1,27 @@
+{
+    "name": "sxqibo/fast-yks",
+    "description": "易科士",
+    "type": "library",
+    "autoload": {
+        "files": [],
+        "psr-4": {
+            "Sxqibo\\FastYks\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "hongwei",
+            "email": "403236160@qq.com"
+        }
+    ],
+    "require": {
+        "guzzlehttp/guzzle": "~6.0",
+        "vlucas/phpdotenv": "^5.5"
+    },
+    "keywords": [
+        "易科士",
+        "人脸识别"
+    ],
+    "minimum-stability": "dev",
+    "license": "MIT"
+}
